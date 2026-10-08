@@ -1,0 +1,168 @@
+# რვეული
+
+საშინაო დავალებების დაფა — რუსთავის №4 საჯარო სკოლა, IX კლასი.
+
+A homework board for one class. Students open a link and read; two or three
+**კლასის უფროსი** (class reps) sign in and post. The whole interface is in
+Georgian, and it is built for a phone first.
+
+---
+
+## Start it
+
+```bash
+npm install
+npm run dev
+```
+
+It runs immediately with seed data and no backend. To try the rep tools,
+press **შესვლა** and sign in with `nino@skola4.ge` / `demo` — a local demo
+session that exists only in your browser and disappears once Supabase is
+attached.
+
+---
+
+## Attach Supabase
+
+1. Create a project at [supabase.com](https://supabase.com).
+2. Run `supabase/migrations/0001_init.sql` in the SQL editor. It creates the
+   tables, the row-level security policies and the attachments bucket.
+3. Copy `.env.example` to `.env` and fill in the two values from
+   **Project Settings → Data API**:
+
+   ```
+   VITE_SUPABASE_URL=https://<ref>.supabase.co
+   VITE_SUPABASE_ANON_KEY=<publishable key>
+   ```
+
+4. Create an account for each rep under **Authentication → Users**, then
+   give each one a profile row — this, not the account, is what grants the
+   right to post:
+
+   ```sql
+   insert into public.profiles (id, display_name, role) values
+     ('<user-uuid>', 'ნინო',   'owner'),
+     ('<user-uuid>', 'გიორგი', 'rep'),
+     ('<user-uuid>', 'მარიამ', 'rep');
+   ```
+
+Restart the dev server. The app now reads and writes the real project, and
+the demo sign-in is gone.
+
+### How authorisation works
+
+| | Read the board | Post, edit, delete |
+|---|---|---|
+| Student (no account) | yes | no |
+| Signed in, no profile row | yes | no |
+| Signed in with a profile row | yes | yes |
+
+Deleting is soft: the row is kept and hidden, so a mis-tap can be undone
+from the toast. Nothing is ever hard-deleted by the app.
+
+---
+
+## Evening reminders (optional)
+
+One push at 19:00 Tbilisi listing what is due tomorrow. Skip this section
+and everything else still works.
+
+```bash
+npx web-push generate-vapid-keys        # keep both halves
+
+# public half → .env
+VITE_VAPID_PUBLIC_KEY=<public key>
+
+# private half → Supabase, never the client
+supabase secrets set VAPID_PUBLIC_KEY=<public> \
+                     VAPID_PRIVATE_KEY=<private> \
+                     VAPID_SUBJECT=mailto:you@example.com
+
+supabase functions deploy send-reminders --no-verify-jwt
+```
+
+Then edit the two placeholders at the top of
+`supabase/migrations/0002_reminders.sql` and run it to schedule the job.
+
+**On iPhone**, Safari only delivers Web Push once the site has been added
+to the Home Screen (iOS 16.4+). The app detects this and shows the install
+hint instead of a permission prompt Safari would refuse. The in-app
+"new since your last visit" badge works everywhere regardless.
+
+---
+
+## Deploy to GitHub Pages
+
+The repository ships a workflow that builds and publishes on every push to
+`main`. Once the repo exists on GitHub:
+
+1. **Settings → Pages → Build and deployment → Source: GitHub Actions.**
+2. Push to `main`. The site appears at
+   `https://<user>.github.io/<repo>/` in a minute or two.
+
+If you attached Supabase, add the same values under
+**Settings → Secrets and variables → Actions → New repository secret**:
+`VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, and `VITE_VAPID_PUBLIC_KEY`
+if you set up reminders. Without them the published site runs on seed data,
+which is still a perfectly good demo.
+
+These are build-time values baked into the client bundle, which is correct
+for Supabase: the publishable key is designed to be public, and row-level
+security — not secrecy — is what stops students writing to the board. Never
+put the `service_role` key here.
+
+A project site is served from `/<repo>/`, not the domain root, so the
+workflow passes `VITE_BASE=/<repo>/` to the build. Everything else derives
+from it: the service worker registers at that scope, and the manifest uses
+paths relative to itself. Renaming the repo needs no code change.
+
+`npm run build` also writes `dist/404.html`, because Pages has no rewrite
+rules and would otherwise 404 on a refresh.
+
+### Other hosts
+
+`vercel.json` is still here if you prefer Vercel — import the repo, add the
+same environment variables, and it builds at the domain root with no base
+path. A custom domain on Pages works the same way: set `VITE_BASE=/`.
+
+## How it is built
+
+```
+src/
+  lib/
+    georgian.js      relative dates, weekday cases, Tbilisi time
+    subjects.js      the 14 subjects and the paper each one is printed on
+    repository.js    one interface; Supabase when configured, seed data when not
+    auth.js          rep sign-in (and the local demo session)
+    doneState.js     the personal tick, localStorage only
+    compressImage.js shrinks textbook photos before upload
+    push.js          reminder subscription
+  hooks/             useHomework, useSession, useDone, useNow, useToast
+  components/        Navbar, HeroDeadline, FilterBar, HomeworkGrid,
+                     HomeworkCard, WeekView, ArchiveView, Sheet,
+                     HomeworkSheet, LoginSheet, BottomNav, Toast, …
+supabase/
+  migrations/        schema, RLS, storage, cron
+  functions/         the reminder sender
+```
+
+Two decisions worth knowing:
+
+- **All dates are computed in Asia/Tbilisi**, never in the device timezone,
+  so "ხვალ" means the same thing on every phone in the class.
+- **`repository.js` is the only module that knows whether a backend
+  exists.** Everything above it calls the same functions either way, which
+  is why attaching Supabase is a configuration change rather than a rewrite.
+
+### Design
+
+The visual world is the Georgian school exercise book. Each card carries
+the ruling of the notebook that subject actually uses — squared for
+მათემატიკა, ფიზიკა and ქიმია, lined for the languages and humanities,
+blank for ხელოვნება, მუსიკა and სპორტი — so subjects are recognisable
+without a colour-coded badge.
+
+That matters because red is doing one job only: the margin rule down the
+left of every card **is** the deadline. Solid when the work is due today or
+tomorrow, drawn twice when it is overdue, faint when it is far off, and
+extinguished when you tick it done. One mark, one meaning.

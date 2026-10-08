@@ -1,0 +1,8 @@
+# Normalise to LF in the repository. CI runs on Linux; Windows checkouts
+# still get CRLF locally via core.autocrlf.
+* text=auto eol=lf
+
+*.png binary
+*.ico binary
+*.woff  binary
+*.woff2 binary

@@ -1,0 +1,355 @@
+@import "tailwindcss";
+
+/* ============================================================
+   რვეული — design tokens
+   The world is a Georgian school exercise book, rendered dark.
+   Warm paper-cream type on deep ink navy; ballpoint red is the
+   only strong colour and it is reserved for deadlines.
+   ============================================================ */
+@theme {
+  /* Ground & surfaces */
+  --color-ink-900: #0a1018; /* page ground */
+  --color-ink-850: #0e1623; /* sunken (nav, sheet chrome) */
+  --color-ink-800: #131c2b; /* card surface */
+  --color-ink-700: #1c2739; /* inputs, raised controls */
+  --color-ink-600: #273347; /* borders on raised controls */
+
+  /* Ink on paper */
+  --color-paper: #eae4d5; /* primary text, warm cream */
+  --color-paper-2: #a7b0c0; /* secondary */
+  --color-paper-3: #8a94a6; /* meta — light enough for 4.5:1 at 12px */
+
+  /* Ballpoint red: the margin rule, and nothing else */
+  --color-red-pen: #e2483a; /* rules and marks (non-text) */
+  --color-red-text: #f4705d; /* the same red, lifted for small text */
+  --color-red-dim: #7e3127; /* a rule drawn lightly */
+
+  /* Ink blue: links, focus, the active tab */
+  --color-blue-pen: #6e9be0;
+  --color-blue-dim: #2c3f5c;
+
+  /* Extinguished — a finished line */
+  --color-spent: #4c586b;
+
+  --color-hairline: rgb(217 228 245 / 0.09);
+  --color-grid-line: rgb(135 165 210 / 0.065);
+
+  /* Type. Noto Serif Georgian names things; Noto Sans Georgian runs the UI. */
+  --font-serif: "Noto Serif Georgian", Georgia, serif;
+  --font-sans: "Noto Sans Georgian", system-ui, -apple-system, sans-serif;
+
+  /* Mkhedruli needs air: deep descenders (ყ ჟ გ დ), tall ascenders (ბ თ ლ). */
+  --text-meta: 0.75rem;
+  --text-meta--line-height: 1.5;
+  --text-sm: 0.875rem;
+  --text-sm--line-height: 1.55;
+  --text-base: 1rem;
+  --text-base--line-height: 1.62;
+  --text-lg: 1.125rem;
+  --text-lg--line-height: 1.45;
+  --text-xl: 1.375rem;
+  --text-xl--line-height: 1.38;
+  --text-2xl: 1.875rem;
+  --text-2xl--line-height: 1.28;
+  --text-3xl: 2.625rem;
+  --text-3xl--line-height: 1.2;
+
+  --ease-page: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-tap: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* ============================================================
+   Base
+   ============================================================ */
+@layer base {
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+    scroll-behavior: smooth;
+  }
+
+  body {
+    margin: 0;
+    background-color: var(--color-ink-900);
+    color: var(--color-paper);
+    font-family: var(--font-sans);
+    font-size: var(--text-base);
+    /* Mkhedruli is already tight; negative tracking closes it up and hurts
+       legibility at UI sizes. Hold at zero and let size carry hierarchy. */
+    letter-spacing: 0;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    overflow-x: hidden;
+    min-height: 100dvh;
+  }
+
+  /* The graph-paper ground: fixed behind everything, so scrolling the feed
+     feels like sliding a page across a desk, not moving the desk. */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background-image:
+      repeating-linear-gradient(
+        to right,
+        var(--color-grid-line) 0 1px,
+        transparent 1px 28px
+      ),
+      repeating-linear-gradient(
+        to bottom,
+        var(--color-grid-line) 0 1px,
+        transparent 1px 28px
+      );
+    mask-image: radial-gradient(
+      ellipse 120% 80% at 50% 0%,
+      #000 0%,
+      rgb(0 0 0 / 0.35) 55%,
+      transparent 100%
+    );
+  }
+
+  h1,
+  h2,
+  h3 {
+    font-family: var(--font-serif);
+    font-weight: 600;
+    margin: 0;
+    /* Georgian ascenders and descenders clip against tight line boxes. */
+    padding-block: 0.06em;
+    text-wrap: balance;
+  }
+
+  p {
+    margin: 0;
+    text-wrap: pretty;
+  }
+
+  button,
+  input,
+  select,
+  textarea {
+    font: inherit;
+    color: inherit;
+  }
+
+  /* Dates and counts should not wobble as they tick over. */
+  time,
+  .tnum {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* --- Browser surfaces. These ship with defaults belonging to no design
+     system, so they get themed from the palette like everything else. --- */
+  ::selection {
+    background: var(--color-blue-dim);
+    color: var(--color-paper);
+  }
+
+  :root {
+    accent-color: var(--color-blue-pen);
+    caret-color: var(--color-red-pen);
+    scrollbar-color: var(--color-ink-600) transparent;
+    scrollbar-width: thin;
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--color-ink-600);
+    border-radius: 99px;
+    border: 3px solid var(--color-ink-900);
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--color-spent);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-blue-pen);
+    outline-offset: 2px;
+    border-radius: 3px;
+  }
+  :focus:not(:focus-visible) {
+    outline: none;
+  }
+
+  a {
+    color: var(--color-blue-pen);
+    text-decoration-thickness: 1px;
+    text-underline-offset: 0.2em;
+  }
+
+  input::placeholder,
+  textarea::placeholder {
+    color: var(--color-paper-3);
+  }
+
+  /* Native date and time pickers draw a black glyph on a dark field. */
+  input[type="date" i]::-webkit-calendar-picker-indicator,
+  input[type="time" i]::-webkit-calendar-picker-indicator,
+  input[type="datetime-local" i]::-webkit-calendar-picker-indicator {
+    filter: invert(1) opacity(0.55);
+    cursor: pointer;
+  }
+  input[type="date" i]::-webkit-calendar-picker-indicator:hover,
+  input[type="time" i]::-webkit-calendar-picker-indicator:hover {
+    filter: invert(1) opacity(0.9);
+  }
+}
+
+/* ============================================================
+   Paper rulings — the notebook you would actually use for a subject.
+   Squared for the exact sciences, ruled for language and humanities,
+   blank for art, music and sport.
+   ============================================================ */
+@utility paper-squared {
+  background-image:
+    repeating-linear-gradient(
+      to right,
+      rgb(135 165 210 / 0.055) 0 1px,
+      transparent 1px 19px
+    ),
+    repeating-linear-gradient(
+      to bottom,
+      rgb(135 165 210 / 0.055) 0 1px,
+      transparent 1px 19px
+    );
+}
+
+@utility paper-ruled {
+  background-image: repeating-linear-gradient(
+    to bottom,
+    transparent 0 25px,
+    rgb(135 165 210 / 0.07) 25px 26px
+  );
+  background-position: 0 6px;
+}
+
+@utility paper-plain {
+  background-image: none;
+}
+
+/* ============================================================
+   Motion. One orchestrated moment on first paint; after that,
+   movement only ever answers a tap.
+   ============================================================ */
+@keyframes page-settle {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes rule-draw {
+  from {
+    transform: scaleY(0);
+  }
+  to {
+    transform: scaleY(1);
+  }
+}
+
+@keyframes sheet-rise {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+@keyframes backdrop-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@utility animate-settle {
+  animation: page-settle 0.52s var(--ease-page) both;
+}
+
+@utility animate-rule {
+  animation: rule-draw 0.6s var(--ease-page) both;
+  transform-origin: top;
+}
+
+@utility animate-sheet {
+  animation: sheet-rise 0.42s var(--ease-page) both;
+}
+
+@utility animate-backdrop {
+  animation: backdrop-in 0.3s linear both;
+}
+
+@utility animate-toast {
+  animation: toast-in 0.34s var(--ease-tap) both;
+}
+
+/* Horizontal filter rail: no visible scrollbar, snaps to each pill. */
+@utility rail {
+  overflow-x: auto;
+  scroll-snap-type: x proximity;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* Reading measure. Georgian sets a little wider than Latin per character. */
+@utility measure {
+  max-width: 68ch;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  /* Entrances must still land visible, not freeze at their "from" state. */
+  .animate-settle,
+  .animate-rule,
+  .animate-sheet,
+  .animate-toast {
+    animation: none !important;
+    opacity: 1;
+    transform: none;
+  }
+}
