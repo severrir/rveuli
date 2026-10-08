@@ -1,11 +1,12 @@
 import { LogIn, LogOut } from "lucide-react";
+import InstallButton from "./InstallButton.jsx";
 
 /**
  * The header stays put while the board scrolls under it, so the class and
  * the current role are always answerable. The blur is here to keep the
  * title legible over moving cards, not as an effect.
  */
-export default function Navbar({ rep, onSignIn, onSignOut }) {
+export default function Navbar({ rep, onSignIn, onSignOut, onToast }) {
   return (
     <header className="sticky top-0 z-30 border-b border-hairline bg-ink-900/92 backdrop-blur-md">
       <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-2.5">
@@ -20,6 +21,8 @@ export default function Navbar({ rep, onSignIn, onSignOut }) {
             </span>
           </p>
         </div>
+
+        <InstallButton onToast={onToast} />
 
         {rep ? (
           <>

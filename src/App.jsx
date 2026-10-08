@@ -274,6 +274,7 @@ export default function App() {
 
       <Navbar
         rep={rep}
+        onToast={show}
         onSignIn={() => setLoginOpen(true)}
         onSignOut={async () => {
           await signOut();
