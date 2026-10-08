@@ -132,15 +132,9 @@ create policy homework_update on public.homework
   for update to authenticated
   using (private.is_rep()) with check (private.is_rep());
 
--- Students subscribe without an account, so inserts are open. Nothing can
--- be read back: an endpoint is only ever written, or deleted by its owner.
-drop policy if exists push_insert on public.push_subscriptions;
-create policy push_insert on public.push_subscriptions
-  for insert with check (true);
-
-drop policy if exists push_delete on public.push_subscriptions;
-create policy push_delete on public.push_subscriptions
-  for delete using (true);
+-- push_subscriptions has no policies at all, so nothing can read, write or
+-- delete it through the table API. Devices go through the two functions in
+-- 0003, which each act on a single endpoint. See that file for why.
 
 -- ---------------------------------------------------------------------
 -- Attachments bucket

@@ -143,23 +143,27 @@ export async function enableReminders(settings = readSettings()) {
       applicationServerKey: urlBase64ToUint8Array(await publicKey()),
     }));
 
-  const json = subscription.toJSON();
-  const { error } = await supabase.from("push_subscriptions").upsert(
-    {
-      endpoint: json.endpoint,
-      p256dh: json.keys.p256dh,
-      auth: json.keys.auth,
-      remind_hour: settings.hour,
-      school_nights_only: settings.schoolNightsOnly,
-      failed_at: null,
-      updated_at: new Date().toISOString(),
-    },
-    { onConflict: "endpoint" },
-  );
-  if (error) throw error;
-
+  await saveSubscription(subscription, settings);
   writeSettings(settings);
   return true;
+}
+
+/**
+ * Written through an RPC rather than straight to the table: the table has
+ * no SELECT policy, by design, so an upsert cannot read the row it would
+ * conflict with. The function touches exactly one endpoint and returns
+ * nothing, so it cannot be used to enumerate who is subscribed.
+ */
+async function saveSubscription(subscription, settings) {
+  const json = subscription.toJSON();
+  const { error } = await supabase.rpc("save_push_subscription", {
+    p_endpoint: json.endpoint,
+    p_p256dh: json.keys.p256dh,
+    p_auth: json.keys.auth,
+    p_hour: settings.hour,
+    p_school_only: settings.schoolNightsOnly,
+  });
+  if (error) throw error;
 }
 
 /** Change the schedule without asking for permission again. */
@@ -169,16 +173,7 @@ export async function updateSettings(settings) {
   const subscription = await currentSubscription();
   if (!subscription || !isPushConfigured()) return;
 
-  const { endpoint } = subscription.toJSON();
-  const { error } = await supabase
-    .from("push_subscriptions")
-    .update({
-      remind_hour: settings.hour,
-      school_nights_only: settings.schoolNightsOnly,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("endpoint", endpoint);
-  if (error) throw error;
+  await saveSubscription(subscription, settings);
 }
 
 /** Turn reminders off and forget this device server-side. */
@@ -190,6 +185,6 @@ export async function disableReminders() {
   const { endpoint } = subscription.toJSON();
   await subscription.unsubscribe();
   if (isPushConfigured()) {
-    await supabase.from("push_subscriptions").delete().eq("endpoint", endpoint);
+    await supabase.rpc("delete_push_subscription", { p_endpoint: endpoint });
   }
 }
