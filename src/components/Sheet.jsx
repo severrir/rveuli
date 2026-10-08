@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 
 /**
@@ -6,6 +7,13 @@ import { X } from "lucide-react";
  * losing the board behind it. It rises from the thumb, traps focus while
  * open, closes on Escape or a tap outside, and returns focus where it came
  * from so keyboard and screen-reader users are not dropped at the top.
+ *
+ * It renders through a portal to <body> rather than in place. `fixed` is
+ * relative to the nearest ancestor with a filter, backdrop-filter or
+ * transform, not to the viewport — so a sheet opened from a control inside
+ * the blurred header was laid out against the 64px header and sat almost
+ * entirely off-screen. A portal makes placement independent of wherever
+ * the trigger happens to live.
  */
 export default function Sheet({ open, onClose, title, description, children }) {
   const panelRef = useRef(null);
@@ -58,7 +66,7 @@ export default function Sheet({ open, onClose, title, description, children }) {
 
   if (!open) return null;
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center">
       <button
         type="button"
@@ -97,6 +105,7 @@ export default function Sheet({ open, onClose, title, description, children }) {
           {children}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
