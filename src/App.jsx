@@ -10,7 +10,7 @@ import EmptyState from "./components/EmptyState.jsx";
 import LoginSheet from "./components/LoginSheet.jsx";
 import HomeworkSheet from "./components/HomeworkSheet.jsx";
 import Toast from "./components/Toast.jsx";
-import NotifyBanner from "./components/NotifyBanner.jsx";
+import ReminderSheet from "./components/ReminderSheet.jsx";
 
 import { useHomework } from "./hooks/useHomework.js";
 import { useDone } from "./hooks/useDone.js";
@@ -57,6 +57,7 @@ export default function App() {
   const [query, setQuery] = useState("");
   const [subject, setSubject] = useState("all");
   const [loginOpen, setLoginOpen] = useState(false);
+  const [remindersOpen, setRemindersOpen] = useState(false);
   const [sheet, setSheet] = useState(null); // null | {} | homework item
   const [firstPaint, setFirstPaint] = useState(true);
   const [lastSeen] = useState(readLastSeen);
@@ -275,6 +276,7 @@ export default function App() {
       <Navbar
         rep={rep}
         onToast={show}
+        onReminders={() => setRemindersOpen(true)}
         onSignIn={() => setLoginOpen(true)}
         onSignOut={async () => {
           await signOut();
@@ -297,7 +299,6 @@ export default function App() {
                 ინტერნეტი ვერ მივიღე — ეს ბოლო შენახული სიაა.
               </p>
             )}
-            <NotifyBanner onToast={show} />
             <FilterBar
               query={query}
               onQueryChange={setQuery}
@@ -357,6 +358,12 @@ export default function App() {
         isRep={isRep}
         onAdd={() => setSheet({})}
         badge={view === "feed" ? 0 : newCount}
+      />
+
+      <ReminderSheet
+        open={remindersOpen}
+        onClose={() => setRemindersOpen(false)}
+        onToast={show}
       />
 
       <LoginSheet

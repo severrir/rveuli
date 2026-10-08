@@ -1,34 +1,36 @@
 /**
  * Evening reminders.
  *
- * A scheduled function sends one push at 19:00 Tbilisi listing what is due
- * tomorrow. Subscriptions are anonymous — an endpoint and its keys, with no
- * name or account attached — because students never sign in.
+ * A scheduled function wakes every hour and notifies the devices whose
+ * chosen hour has come, saying how much is due tomorrow.
  *
- * iOS only delivers Web Push to a site that has been added to the Home
- * Screen (iOS 16.4+). A good share of the class is on iPhone, so the UI
- * detects that case and asks for the install rather than showing a
- * permission prompt that Safari will silently refuse.
+ * Subscriptions are anonymous — an endpoint and its keys, no name, no
+ * account — because students never sign in. That is also why the settings
+ * live on the subscription row rather than against a user, and are
+ * mirrored into localStorage so they survive turning reminders off and on.
+ *
+ * iOS only delivers Web Push to a site added to the Home Screen
+ * (iOS 16.4+), so the UI asks for the install first rather than firing a
+ * permission prompt Safari will silently refuse.
  */
 
 import { supabase, isSupabaseConfigured } from "./supabase.js";
 
-const VAPID_PUBLIC_KEY = import.meta.env.VITE_VAPID_PUBLIC_KEY;
+const SETTINGS_KEY = "rveuli.reminders.v1";
+
+export const DEFAULT_SETTINGS = {
+  hour: 19,
+  schoolNightsOnly: true,
+};
+
+/** Hours a student might plausibly want to be reminded. */
+export const HOUR_CHOICES = [15, 16, 17, 18, 19, 20, 21, 22];
 
 export const isPushSupported = () =>
   typeof window !== "undefined" &&
   "serviceWorker" in navigator &&
   "PushManager" in window &&
   "Notification" in window;
-
-/**
- * Whether reminders can actually be delivered. Without a VAPID key and a
- * Supabase project there is nothing to send the push, so the offer must not
- * appear at all — asking for notification permission and then failing is a
- * promise the app cannot keep, and the browser remembers the refusal.
- */
-export const isPushConfigured = () =>
-  Boolean(VAPID_PUBLIC_KEY) && isSupabaseConfigured;
 
 export const isIos = () =>
   /iphone|ipad|ipod/i.test(navigator.userAgent) ||
@@ -41,6 +43,32 @@ export const isStandalone = () =>
 
 export const permission = () =>
   isPushSupported() ? Notification.permission : "unsupported";
+
+/**
+ * Reminders need a backend to send them. The signing key now lives on the
+ * server and is fetched when subscribing, so there is no client-side key
+ * to check — only whether there is a project at all.
+ */
+export const isPushConfigured = () => isSupabaseConfigured;
+
+export function readSettings() {
+  try {
+    const raw = localStorage.getItem(SETTINGS_KEY);
+    return raw
+      ? { ...DEFAULT_SETTINGS, ...JSON.parse(raw) }
+      : { ...DEFAULT_SETTINGS };
+  } catch {
+    return { ...DEFAULT_SETTINGS };
+  }
+}
+
+function writeSettings(settings) {
+  try {
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+  } catch {
+    // The choice still applies for this session.
+  }
+}
 
 export async function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return null;
@@ -64,10 +92,39 @@ function urlBase64ToUint8Array(base64) {
   return Uint8Array.from([...raw].map((c) => c.charCodeAt(0)));
 }
 
-/** Returns true once the device is subscribed and stored. */
-export async function enableReminders() {
+/**
+ * The server owns the VAPID keypair and hands out the public half, so the
+ * key is never copied into the client build where it could drift out of
+ * sync with the private half that signs the messages.
+ */
+let cachedKey = null;
+async function publicKey() {
+  if (cachedKey) return cachedKey;
+  const { data, error } = await supabase.functions.invoke(
+    "send-reminders?action=key",
+    { method: "GET" },
+  );
+  if (error || !data?.publicKey) {
+    throw new Error("შეხსენებების გასაღები ვერ მივიღე.");
+  }
+  cachedKey = data.publicKey;
+  return cachedKey;
+}
+
+async function currentSubscription() {
+  const registration = await navigator.serviceWorker.getRegistration();
+  return (await registration?.pushManager.getSubscription()) ?? null;
+}
+
+export async function isSubscribed() {
+  if (!isPushSupported() || Notification.permission !== "granted") return false;
+  return Boolean(await currentSubscription());
+}
+
+/** Turn reminders on. Returns true once the device is subscribed. */
+export async function enableReminders(settings = readSettings()) {
   if (!isPushSupported()) return false;
-  if (!VAPID_PUBLIC_KEY || !isSupabaseConfigured) {
+  if (!isPushConfigured()) {
     throw new Error("შეხსენებები ჯერ არ არის ჩართული სერვერზე.");
   }
 
@@ -79,12 +136,11 @@ export async function enableReminders() {
     (await registerServiceWorker());
   if (!registration) return false;
 
-  const existing = await registration.pushManager.getSubscription();
   const subscription =
-    existing ??
+    (await registration.pushManager.getSubscription()) ??
     (await registration.pushManager.subscribe({
       userVisibleOnly: true,
-      applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
+      applicationServerKey: urlBase64ToUint8Array(await publicKey()),
     }));
 
   const json = subscription.toJSON();
@@ -93,29 +149,47 @@ export async function enableReminders() {
       endpoint: json.endpoint,
       p256dh: json.keys.p256dh,
       auth: json.keys.auth,
+      remind_hour: settings.hour,
+      school_nights_only: settings.schoolNightsOnly,
+      failed_at: null,
+      updated_at: new Date().toISOString(),
     },
     { onConflict: "endpoint" },
   );
   if (error) throw error;
 
+  writeSettings(settings);
   return true;
 }
 
+/** Change the schedule without asking for permission again. */
+export async function updateSettings(settings) {
+  writeSettings(settings);
+
+  const subscription = await currentSubscription();
+  if (!subscription || !isPushConfigured()) return;
+
+  const { endpoint } = subscription.toJSON();
+  const { error } = await supabase
+    .from("push_subscriptions")
+    .update({
+      remind_hour: settings.hour,
+      school_nights_only: settings.schoolNightsOnly,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("endpoint", endpoint);
+  if (error) throw error;
+}
+
+/** Turn reminders off and forget this device server-side. */
 export async function disableReminders() {
   if (!isPushSupported()) return;
-  const registration = await navigator.serviceWorker.getRegistration();
-  const subscription = await registration?.pushManager.getSubscription();
+  const subscription = await currentSubscription();
   if (!subscription) return;
 
   const { endpoint } = subscription.toJSON();
   await subscription.unsubscribe();
-  if (isSupabaseConfigured) {
+  if (isPushConfigured()) {
     await supabase.from("push_subscriptions").delete().eq("endpoint", endpoint);
   }
-}
-
-export async function isSubscribed() {
-  if (!isPushSupported() || Notification.permission !== "granted") return false;
-  const registration = await navigator.serviceWorker.getRegistration();
-  return Boolean(await registration?.pushManager.getSubscription());
 }
