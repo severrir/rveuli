@@ -137,6 +137,26 @@ deploy the function — it provisions its own keys on the first call.
 Screen (iOS 16.4+). The settings sheet detects that and shows the install
 steps instead of a permission prompt Safari would refuse.
 
+### Security notes
+
+Three Supabase advisories are left open on purpose:
+
+- **`push_subscriptions` has RLS on and no policies.** That is the point:
+  the table is unreachable through the API, and the two functions above are
+  the only way in. A SELECT policy would make the endpoint list readable,
+  which would let anyone notify the whole class.
+- **`save_push_subscription` / `delete_push_subscription` are callable by
+  `anon`.** They have to be — students never sign in. Each validates its
+  input, touches one endpoint and returns nothing, so neither can read or
+  enumerate anything.
+- **`pg_net` is installed in `public`.** Its functions live in the `net`
+  schema and are not exposed: calling `/rest/v1/rpc/http_post` as `anon`
+  returns 404. Moving the extension would risk the cron job for a lint with
+  no reachable surface.
+
+Worth fixing when you get a moment: **leaked password protection** is off.
+Dashboard → Authentication → Policies.
+
 ## Deploy to GitHub Pages
 
 The repository ships a workflow that builds and publishes on every push to
