@@ -4,25 +4,38 @@ import { useCallback, useEffect, useState } from "react";
  * Installing the board as an app.
  *
  * Chrome and Edge fire `beforeinstallprompt`, which must be captured and
- * replayed later from a real tap — the browser refuses a prompt that was
- * not triggered by a gesture. Safari fires nothing at all and installs only
- * through its own Share menu, so iOS gets instructions instead of a button
- * that would do nothing.
+ * replayed from a real tap — the browser refuses a prompt that did not come
+ * from a gesture. But that event only fires once the browser decides the
+ * app is eligible, and never at all in Safari or Firefox. A button that
+ * waits for it is invisible most of the time, so the offer stays up until
+ * the app is installed and falls back to instructions for the platform in
+ * front of us.
  */
 
-const isIosSafari = () => {
-  if (typeof navigator === "undefined") return false;
-  const ios =
-    /iphone|ipad|ipod/i.test(navigator.userAgent) ||
-    // iPadOS reports as a Mac, but with a touch screen.
-    (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
-  // Chrome and Firefox on iOS cannot install either, and say so differently.
-  return ios && /safari/i.test(navigator.userAgent) && !/crios|fxios/i.test(navigator.userAgent);
-};
+const ua = () => (typeof navigator === "undefined" ? "" : navigator.userAgent);
+
+const isIos = () =>
+  /iphone|ipad|ipod/i.test(ua()) ||
+  // iPadOS reports as a Mac, but with a touch screen.
+  (typeof navigator !== "undefined" &&
+    navigator.platform === "MacIntel" &&
+    navigator.maxTouchPoints > 1);
+
+const isAndroid = () => /android/i.test(ua());
+const isFirefox = () => /firefox|fxios/i.test(ua());
+
+/** Which set of manual steps to show when we cannot prompt. */
+export function installPlatform() {
+  if (isIos()) return "ios";
+  if (isAndroid()) return "android";
+  if (isFirefox()) return "firefox";
+  return "desktop";
+}
 
 const isStandalone = () =>
   typeof window !== "undefined" &&
   (window.matchMedia("(display-mode: standalone)").matches ||
+    window.matchMedia("(display-mode: window-controls-overlay)").matches ||
     window.navigator.standalone === true);
 
 export function useInstall() {
@@ -31,7 +44,7 @@ export function useInstall() {
 
   useEffect(() => {
     const onPrompt = (e) => {
-      // Stop the browser's own mini-infobar so the app can ask in context.
+      // Suppress the browser's own mini-infobar; we ask in context instead.
       e.preventDefault();
       setPrompt(e);
     };
@@ -67,7 +80,7 @@ export function useInstall() {
   return {
     installed,
     canPrompt: Boolean(prompt),
-    needsIosInstructions: !installed && isIosSafari(),
+    platform: installPlatform(),
     install,
   };
 }

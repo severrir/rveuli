@@ -1,19 +1,39 @@
 import { useState } from "react";
-import { Download, Plus, Share } from "lucide-react";
+import { Download, EllipsisVertical, Plus, Share } from "lucide-react";
 import Sheet from "./Sheet.jsx";
 import { useInstall } from "../hooks/useInstall.js";
 
 /**
  * Puts the board on the home screen, where a student will actually find it
- * again. Hidden once installed, and hidden entirely in browsers that can
- * neither prompt nor be instructed — an offer that leads nowhere is worse
- * than no offer.
+ * again. Visible until the app is installed: if the browser will let us
+ * prompt, one tap does it; otherwise the sheet shows where that browser
+ * hides the option, which beats a button that quietly never appears.
  */
+
+const STEPS = {
+  ios: [
+    { icon: Share, text: "დააჭირე გაზიარების ღილაკს ბრაუზერის ქვედა ზოლში." },
+    { icon: Plus, text: "ჩამოდი ქვემოთ და აირჩიე „Add to Home Screen“." },
+  ],
+  android: [
+    { icon: EllipsisVertical, text: "გახსენი ბრაუზერის მენიუ ზემოთ მარჯვნივ." },
+    { icon: Download, text: "აირჩიე „Install app“ ან „მთავარ ეკრანზე დამატება“." },
+  ],
+  desktop: [
+    { icon: Download, text: "მისამართის ველის ბოლოს დააჭირე დაყენების ნიშანს." },
+    { icon: EllipsisVertical, text: "ან ბრაუზერის მენიუდან აირჩიე „Install“." },
+  ],
+  firefox: [
+    { icon: EllipsisVertical, text: "გახსენი ბრაუზერის მენიუ." },
+    { icon: Plus, text: "აირჩიე „მთავარ ეკრანზე დამატება“." },
+  ],
+};
+
 export default function InstallButton({ onToast }) {
-  const { installed, canPrompt, needsIosInstructions, install } = useInstall();
+  const { installed, canPrompt, platform, install } = useInstall();
   const [helpOpen, setHelpOpen] = useState(false);
 
-  if (installed || (!canPrompt && !needsIosInstructions)) return null;
+  if (installed) return null;
 
   async function handleClick() {
     if (canPrompt) {
@@ -23,6 +43,8 @@ export default function InstallButton({ onToast }) {
     }
     setHelpOpen(true);
   }
+
+  const steps = STEPS[platform] ?? STEPS.desktop;
 
   return (
     <>
@@ -43,40 +65,30 @@ export default function InstallButton({ onToast }) {
         description="ორი ნაბიჯი, და რვეული ჩვეულებრივ აპლიკაციასავით გაიხსნება."
       >
         <ol className="flex flex-col gap-4 pb-2">
-          <li className="flex gap-3">
-            <span className="tnum mt-0.5 grid size-7 shrink-0 place-items-center rounded-full border border-ink-600 text-sm text-paper-2">
-              1
-            </span>
-            <p className="text-base text-paper">
-              დააჭირე გაზიარების ღილაკს
-              <Share
-                size={16}
-                strokeWidth={1.75}
-                aria-hidden="true"
-                className="mx-1.5 inline align-text-bottom text-blue-pen"
-              />
-              ბრაუზერის ქვედა ზოლში.
-            </p>
-          </li>
-          <li className="flex gap-3">
-            <span className="tnum mt-0.5 grid size-7 shrink-0 place-items-center rounded-full border border-ink-600 text-sm text-paper-2">
-              2
-            </span>
-            <p className="text-base text-paper">
-              ჩამოდი ქვემოთ და აირჩიე
-              <Plus
-                size={16}
-                strokeWidth={2}
-                aria-hidden="true"
-                className="mx-1.5 inline align-text-bottom text-blue-pen"
-              />
-              „Add to Home Screen“.
-            </p>
-          </li>
+          {steps.map((step, i) => {
+            const Icon = step.icon;
+            return (
+              <li key={i} className="flex gap-3">
+                <span className="tnum mt-0.5 grid size-7 shrink-0 place-items-center rounded-full border border-ink-600 text-sm text-paper-2">
+                  {i + 1}
+                </span>
+                <p className="measure text-base text-paper">
+                  <Icon
+                    size={17}
+                    strokeWidth={1.75}
+                    aria-hidden="true"
+                    className="mr-1.5 inline align-text-bottom text-blue-pen"
+                  />
+                  {step.text}
+                </p>
+              </li>
+            );
+          })}
         </ol>
 
         <p className="measure border-t border-hairline pt-3 text-sm text-paper-3">
-          შემდეგ რვეული მთავარ ეკრანზე გამოჩნდება და სრულ ეკრანზე გაიხსნება.
+          შემდეგ რვეული მთავარ ეკრანზე გამოჩნდება, სრულ ეკრანზე გაიხსნება და
+          ინტერნეტის გარეშეც დაგხვდება ბოლოს ნანახი სია.
         </p>
       </Sheet>
     </>
