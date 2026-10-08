@@ -100,9 +100,25 @@ create policy profiles_self_update on public.profiles
   for update using (id = auth.uid()) with check (id = auth.uid());
 
 -- Everyone, signed in or not, reads homework that has not been deleted.
+--
+-- Reps additionally see soft-deleted rows. That is not a convenience: a
+-- soft delete is an UPDATE, PostgREST runs it as UPDATE ... RETURNING, and
+-- Postgres requires the resulting row to pass the SELECT policies. With a
+-- single `deleted_at is null` read policy the row vanished the moment it
+-- was marked deleted and the update was rejected, making deletion
+-- impossible. The client still filters `deleted_at is null`, so the feed
+-- is unaffected.
 drop policy if exists homework_read on public.homework;
-create policy homework_read on public.homework
-  for select using (deleted_at is null);
+drop policy if exists homework_read_public on public.homework;
+drop policy if exists homework_read_rep on public.homework;
+
+create policy homework_read_public on public.homework
+  for select to anon
+  using (deleted_at is null);
+
+create policy homework_read_rep on public.homework
+  for select to authenticated
+  using (deleted_at is null or private.is_rep());
 
 drop policy if exists homework_insert on public.homework;
 create policy homework_insert on public.homework
