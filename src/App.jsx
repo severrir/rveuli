@@ -255,7 +255,16 @@ export default function App() {
   /* ---- Render -------------------------------------------------------- */
 
   return (
-    <div className="min-h-dvh pb-[calc(84px+env(safe-area-inset-bottom))]">
+    <div
+      className={
+        // The feed must be able to scroll clear of the fixed chrome, or the
+        // last card's controls sit under it and cannot be tapped. The bar
+        // alone needs 84px; the rep's floating add button reaches higher.
+        isRep
+          ? "min-h-dvh pb-[calc(148px+env(safe-area-inset-bottom))]"
+          : "min-h-dvh pb-[calc(84px+env(safe-area-inset-bottom))]"
+      }
+    >
       <a
         href="#main"
         className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-lg focus:bg-paper focus:px-4 focus:py-2 focus:text-ink-900"
