@@ -21,6 +21,15 @@ export const isPushSupported = () =>
   "PushManager" in window &&
   "Notification" in window;
 
+/**
+ * Whether reminders can actually be delivered. Without a VAPID key and a
+ * Supabase project there is nothing to send the push, so the offer must not
+ * appear at all — asking for notification permission and then failing is a
+ * promise the app cannot keep, and the browser remembers the refusal.
+ */
+export const isPushConfigured = () =>
+  Boolean(VAPID_PUBLIC_KEY) && isSupabaseConfigured;
+
 export const isIos = () =>
   /iphone|ipad|ipod/i.test(navigator.userAgent) ||
   // iPadOS 13+ reports as a Mac, but has a touch screen.

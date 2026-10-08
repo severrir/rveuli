@@ -4,6 +4,7 @@ import {
   disableReminders,
   enableReminders,
   isIos,
+  isPushConfigured,
   isPushSupported,
   isStandalone,
   isSubscribed,
@@ -28,6 +29,8 @@ export default function NotifyBanner({ onToast }) {
 
     async function decide() {
       if (!isPushSupported()) return;
+      // Nothing can send the push yet, so do not offer it.
+      if (!isPushConfigured()) return;
 
       let dismissed = false;
       let visits = 0;
