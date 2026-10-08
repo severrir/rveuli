@@ -10,6 +10,7 @@ import EmptyState from "./components/EmptyState.jsx";
 import LoginSheet from "./components/LoginSheet.jsx";
 import HomeworkSheet from "./components/HomeworkSheet.jsx";
 import Toast from "./components/Toast.jsx";
+import Watermark from "./components/Watermark.jsx";
 import ReminderSheet from "./components/ReminderSheet.jsx";
 
 import { useHomework } from "./hooks/useHomework.js";
@@ -346,6 +347,7 @@ export default function App() {
             />
           </div>
         )}
+        <Watermark />
       </main>
 
       <BottomNav
