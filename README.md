@@ -57,6 +57,45 @@ the demo sign-in is gone.
 | Signed in, no profile row | yes | no |
 | Signed in with a profile row | yes | yes |
 
+**The `profiles` row is the grant, not the account.** That is the whole
+permission model, and it means adding or removing a rep is one row.
+
+### Adding a rep (admin)
+
+Open `supabase/add-rep.sql`, change the email, password and name at the
+top, and run the whole file in **Dashboard → SQL Editor → New query**. It
+prints the current list of reps when it finishes.
+
+Running it again for the same email resets that person's password, which is
+also how you recover a forgotten one.
+
+Do not create the auth user by hand in SQL without that script: GoTrue
+reads several token columns into non-nullable strings, and if they are left
+NULL, sign-in fails with the unhelpful "Database error querying schema".
+The script sets them.
+
+You can also create the account through **Authentication → Users → Add
+user** (tick *Auto Confirm User*) and then grant it:
+
+```sql
+insert into public.profiles (id, display_name, role)
+select id, 'გიორგი', 'rep' from auth.users where email = 'giorgi@example.com';
+```
+
+### Removing a rep
+
+```sql
+delete from public.profiles
+where id = (select id from auth.users where email = 'giorgi@example.com');
+```
+
+They keep their account and can still read the board like any student, but
+posting stops immediately — even on a session they already hold. Delete the
+row in **Authentication → Users** too if you want the account gone entirely.
+
+`role` is `rep` or `owner`. Both can post, edit and delete; `owner` is there
+to record who looks after the board.
+
 Deleting is soft: the row is kept and hidden, so a mis-tap can be undone
 from the toast. Nothing is ever hard-deleted by the app.
 
