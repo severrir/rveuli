@@ -68,7 +68,14 @@ alter table public.homework           enable row level security;
 alter table public.push_subscriptions enable row level security;
 
 -- Helper: is the caller a class rep?
-create or replace function public.is_rep()
+--
+-- It lives in `private` rather than `public` because PostgREST exposes the
+-- public schema, which would publish this as /rest/v1/rpc/is_rep. Policy
+-- expressions run as the querying role, so `authenticated` still needs
+-- EXECUTE; `anon` never evaluates a policy that calls it.
+create schema if not exists private;
+
+create or replace function private.is_rep()
 returns boolean
 language sql
 stable
@@ -77,6 +84,10 @@ set search_path = public
 as $$
   select exists (select 1 from public.profiles p where p.id = auth.uid());
 $$;
+
+grant usage on schema private to authenticated;
+revoke all on function private.is_rep() from public, anon;
+grant execute on function private.is_rep() to authenticated;
 
 -- Reps are readable by everyone: the board shows who posted each entry.
 drop policy if exists profiles_read on public.profiles;
@@ -95,13 +106,15 @@ create policy homework_read on public.homework
 
 drop policy if exists homework_insert on public.homework;
 create policy homework_insert on public.homework
-  for insert with check (public.is_rep() and created_by = auth.uid());
+  for insert to authenticated
+  with check (private.is_rep() and created_by = auth.uid());
 
 -- Any rep may fix any entry: a class board is shared, not personal.
 -- Delete is soft, so there is no DELETE policy at all — the row is updated.
 drop policy if exists homework_update on public.homework;
 create policy homework_update on public.homework
-  for update using (public.is_rep()) with check (public.is_rep());
+  for update to authenticated
+  using (private.is_rep()) with check (private.is_rep());
 
 -- Students subscribe without an account, so inserts are open. Nothing can
 -- be read back: an endpoint is only ever written, or deleted by its owner.
@@ -126,11 +139,13 @@ create policy homework_files_read on storage.objects
 
 drop policy if exists homework_files_write on storage.objects;
 create policy homework_files_write on storage.objects
-  for insert with check (bucket_id = 'homework-files' and public.is_rep());
+  for insert to authenticated
+  with check (bucket_id = 'homework-files' and private.is_rep());
 
 drop policy if exists homework_files_delete on storage.objects;
 create policy homework_files_delete on storage.objects
-  for delete using (bucket_id = 'homework-files' and public.is_rep());
+  for delete to authenticated
+  using (bucket_id = 'homework-files' and private.is_rep());
 
 -- ---------------------------------------------------------------------
 -- Realtime: a rep posting from their phone appears on every open board
