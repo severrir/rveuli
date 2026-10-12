@@ -23,6 +23,9 @@ export const DEFAULT_SETTINGS = {
   schoolNightsOnly: true,
   // "A წერა has been set" — sent when it is set, not on a schedule.
   announceTests: true,
+  // "An ევენთი has been added" — likewise. Separate, so a student who
+  // wants test dates but not the autumn concert can say so.
+  announceEvents: true,
 };
 
 /** Hours a student might plausibly want to be reminded. */
@@ -172,13 +175,20 @@ async function saveSubscription(subscription, settings) {
   // signatures that both match a five-argument call, and PostgREST would
   // start refusing with "function is not unique" — including for the
   // already-published bundle, which still calls it with five.
-  const { error: announceError } = await supabase.rpc("set_push_announce", {
-    p_endpoint: json.endpoint,
-    p_on: settings.announceTests ?? true,
-  });
-  // The schedule is saved either way; only the announcement flag is behind.
-  if (announceError) {
-    console.error("[რვეული] announce flag not saved", announceError);
+  const flags = await Promise.all([
+    supabase.rpc("set_push_announce", {
+      p_endpoint: json.endpoint,
+      p_on: settings.announceTests ?? true,
+    }),
+    supabase.rpc("set_push_announce_events", {
+      p_endpoint: json.endpoint,
+      p_on: settings.announceEvents ?? true,
+    }),
+  ]);
+  // The schedule is saved either way; only the announcement flags are
+  // behind, and each defaults to on server-side.
+  for (const { error: flagError } of flags) {
+    if (flagError) console.error("[რვეული] announce flag not saved", flagError);
   }
 }
 

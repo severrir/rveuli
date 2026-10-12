@@ -1,5 +1,5 @@
 import {
-  Archive,
+  CalendarDays,
   CalendarRange,
   ListChecks,
   PenLine,
@@ -12,22 +12,28 @@ import {
  * safe-area inset, and the add button floats above it for signed-in reps so
  * the five tabs keep the same positions whoever is looking.
  *
- * `addLabel` changes with the tab, because the one button has to mean three
- * different things: a homework on the board, a წერა in the term, a question
- * put to the class. A plus that silently added the wrong kind of thing
- * would be worse than three separate buttons.
+ * `addLabel` changes with the tab, because the one button has to mean four
+ * different things: a homework on the board, a წერა in the term, an event
+ * in the diary, a question put to the class. A plus that silently added
+ * the wrong kind of thing would be worse than four separate buttons.
  *
  * The ballot tab is labelled კენჭისყრა, the single-word form, rather than
  * კენჭის ყრა: at five tabs the label has one line and about ten characters
  * before it wraps, and the one-word spelling is the standard orthography
  * anyway.
+ *
+ * **Five is the ceiling.** არქივი used to sit here and now lives as a
+ * segmented control inside დავალებები, which is where it belongs anyway —
+ * it is the same homework seen later, not a separate section. Six tabs at
+ * 360px gives each one about 60px, which is narrower than "დავალებები"
+ * can be set without wrapping.
  */
 const TABS = [
   { id: "feed", label: "დავალებები", icon: ListChecks },
   { id: "tests", label: "წერები", icon: PenLine },
+  { id: "events", label: "ევენთები", icon: CalendarDays },
   { id: "polls", label: "კენჭისყრა", icon: Vote },
   { id: "week", label: "კვირა", icon: CalendarRange },
-  { id: "archive", label: "არქივი", icon: Archive },
 ];
 
 export default function BottomNav({

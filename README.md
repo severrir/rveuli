@@ -200,6 +200,35 @@ Clearing site data earns a second vote — accepted, because the alternative
 is thirty teenagers holding accounts in order to settle where the
 excursion goes.
 
+## ევენთები
+
+The diary: ექსკურსია, ოლიმპიადა, შეხვედრა, კონცერტი, სპორტული, კლასის
+საღამო, დასვენება.
+
+An event is the only thing in the app with a **place**, and with a time
+that can be a window rather than a deadline — an excursion leaves at 08:00
+and the bus is back at 19:00, while homework is only ever due at a moment.
+So the card leads with when and where, not with a countdown, and the end
+time is optional because a parents' meeting ends when it ends.
+
+Nothing here is ever "overdue". An event that has passed simply happened,
+so its margin rule goes quiet rather than doubling the way an overdue
+homework rule does. Past events stay, behind a toggle.
+
+Adding one announces it, through the same trigger the წერები tab uses, with
+its own switch in the bell settings.
+
+### The five tabs
+
+დავალებები · წერები · ევენთები · კენჭისყრა · კვირა
+
+**არქივი is no longer a tab.** It is a segmented control inside
+დავალებები, which is where it belonged anyway — it is the same homework
+seen later, not a separate section. Six tabs at 360px leaves each about
+60px, narrower than "დავალებები" can be set without wrapping, so something
+had to give and the archive was the least-visited of them. `?view=archive`
+still works, and the board tab stays lit while it is open.
+
 ## Reminders
 
 Students can turn on an evening notification telling them how much is due
@@ -226,8 +255,9 @@ the function works out who is due. If nothing is due tomorrow it sends
 nothing at all; an app that pings you to say there is no homework gets
 muted within a week.
 
-The same function sends the წერა announcement, invoked by the trigger with
-`{ action: "announce-test", id }` instead of by the clock. It is one
+The same function sends the წერა and ევენთი announcements, invoked by a
+trigger with `{ action: "announce-test" | "announce-event", id }` instead
+of by the clock. It is one
 function because it is one VAPID keypair: a second function would need its
 own copy of the signing key. The trigger authenticates exactly as the cron
 job does — the anon key in `Authorization` to satisfy `verify_jwt`, and
@@ -332,16 +362,18 @@ src/
     auth.js          rep sign-in (and the local demo session)
     people.js        the owner tools: add, remove, role, password
     tests.js         the six kinds of წერა, and how a countdown reads
+    events.js        the eight kinds of ევენთი, and when one is over
     polls.js         this device's ballot key, and how a result is shaped
     doneState.js     the personal tick, localStorage only
     compressImage.js shrinks textbook photos before upload
     push.js          reminder subscription
-  hooks/             useHomework, useTests, usePolls, useSession, useDone,
-                     useNow, useToast
+  hooks/             useHomework, useTests, useEvents, usePolls, useSession,
+                     useDone, useNow, useToast
   components/        Navbar, HeroDeadline, FilterBar, HomeworkGrid,
                      HomeworkCard, WeekView, ArchiveView, TestsView,
-                     PollsView, Sheet, HomeworkSheet, TestSheet, PollSheet,
-                     LoginSheet, PeopleSheet, BottomNav, Toast, …
+                     EventsView, PollsView, Sheet, HomeworkSheet, TestSheet,
+                     EventSheet, PollSheet, LoginSheet, PeopleSheet,
+                     BottomNav, Toast, …
 supabase/
   migrations/        schema, RLS, storage, cron
   functions/         the reminder sender

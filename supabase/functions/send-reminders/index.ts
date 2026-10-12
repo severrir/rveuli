@@ -1,14 +1,15 @@
 /**
- * send-reminders — the two notifications რვეული sends.
+ * send-reminders — the notifications რვეული sends.
  *
  * **The evening digest.** Invoked hourly by pg_cron. Each subscribed device
  * stores the hour it wants to hear from us, so the job wakes every hour and
  * only sends to the devices whose hour matches the current Tbilisi clock.
  *
- * **"A წერა has been set."** Invoked by a trigger on `public.tests` the
- * moment a rep schedules one, with `{ action: "announce-test", id }`. This
- * one is not on a schedule — it is news, and it is only worth anything
- * while it is new.
+ * **"A წერა has been set"** and **"an ევენთი has been added"**.
+ * Invoked by a trigger on `public.tests` / `public.events` the moment a rep
+ * saves one, with `{ action: "announce-test" | "announce-event", id }`.
+ * Neither is on a schedule — they are news, and only worth anything while
+ * they are new.
  *
  * The VAPID keypair is generated here on first run and the private half
  * lives in Supabase Vault, so the signing key is never pasted into a
@@ -43,10 +44,10 @@ const CORS = {
 /**
  * The Georgian the student reads.
  *
- * Duplicated from src/lib/subjects.js and src/lib/tests.js rather than
- * imported: an edge function cannot reach into the client bundle, and the
- * subject ids are already written out a third time in the table's CHECK
- * constraint. Adding a subject means touching all three.
+ * Duplicated from the client's own modules rather than imported: an edge
+ * function cannot reach into the bundle, and the ids are already written
+ * out a third time in each table's CHECK constraint. Adding a subject or a
+ * kind means touching all three.
  */
 const SUBJECT_NAMES: Record<string, string> = {
   math: "მათემატიკა",
@@ -63,6 +64,17 @@ const SUBJECT_NAMES: Record<string, string> = {
   art: "ხელოვნება",
   music: "მუსიკა",
   sport: "სპორტი",
+};
+
+const EVENT_KIND_NAMES: Record<string, string> = {
+  excursion: "ექსკურსია",
+  olympiad: "ოლიმპიადა",
+  meeting: "შეხვედრა",
+  concert: "კონცერტი",
+  sport: "სპორტული",
+  party: "კლასის საღამო",
+  holiday: "დასვენება",
+  other: "ევენთი",
 };
 
 const KIND_NAMES: Record<string, string> = {
@@ -144,7 +156,7 @@ type Target = { id: string; endpoint: string; p256dh: string; auth: string };
 
 /**
  * Sends one payload to many devices and retires the endpoints the browser
- * has permanently discarded. Shared by both notifications so neither can
+ * has permanently discarded. Shared by every notification so none can
  * drift into leaking dead subscriptions.
  */
 async function deliver(sb: Admin, targets: Target[], payload: string) {
@@ -177,12 +189,20 @@ async function deliver(sb: Admin, targets: Target[], payload: string) {
   return { sent, retired: dead.length };
 }
 
-/** "ხუთშაბათს, 16 ოქტომბერი" — when the test is written, in Tbilisi. */
+/** "ხუთშაბათს, 16 ოქტომბერი" — the day, in Tbilisi. */
 function whenText(iso: string) {
   const local = new Date(new Date(iso).getTime() + TBILISI_OFFSET_MS);
   return `${WEEKDAYS_LOCATIVE[local.getUTCDay()]}, ${local.getUTCDate()} ${
     MONTHS[local.getUTCMonth()]
   }`;
+}
+
+/** "08:00" in Tbilisi. */
+function clockText(iso: string) {
+  const local = new Date(new Date(iso).getTime() + TBILISI_OFFSET_MS);
+  return `${String(local.getUTCHours()).padStart(2, "0")}:${String(
+    local.getUTCMinutes(),
+  ).padStart(2, "0")}`;
 }
 
 /**
@@ -243,6 +263,57 @@ async function announceTest(sb: Admin, id: string) {
   );
 }
 
+/**
+ * Announces a newly added event.
+ *
+ * Leads with when and where, because that is what the notification is
+ * for: an excursion nobody knows the meeting point of is not announced.
+ */
+async function announceEvent(sb: Admin, id: string) {
+  if (!id) {
+    return Response.json({ error: "missing id" }, { status: 400, headers: CORS });
+  }
+
+  const { data: event, error } = await sb
+    .from("events")
+    .select("id, title, kind, location, starts_at, deleted_at")
+    .eq("id", id)
+    .maybeSingle();
+
+  if (error) {
+    return Response.json({ error: error.message }, { status: 500, headers: CORS });
+  }
+  if (!event || event.deleted_at) {
+    return Response.json({ sent: 0, reason: "no such event" }, { headers: CORS });
+  }
+
+  const { data: subs } = await sb
+    .from("push_subscriptions")
+    .select("id, endpoint, p256dh, auth")
+    .eq("announce_events", true)
+    .is("failed_at", null);
+
+  const targets = (subs ?? []) as Target[];
+
+  const when = `${whenText(event.starts_at)}, ${clockText(event.starts_at)}`;
+
+  const payload = JSON.stringify({
+    title: EVENT_KIND_NAMES[event.kind] ?? "ევენთი",
+    body: event.location
+      ? `${event.title} · ${when} · ${event.location}`
+      : `${event.title} · ${when}`,
+    url: "./?view=events",
+    tag: `rveuli-event-${event.id}`,
+  });
+
+  const { sent, retired } = await deliver(sb, targets, payload);
+
+  return Response.json(
+    { announced: event.id, sent, candidates: targets.length, retired },
+    { headers: CORS },
+  );
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
 
@@ -265,7 +336,7 @@ Deno.serve(async (req) => {
   const { publicKey, privateKey } = await vapid(sb);
   webpush.setVapidDetails(SUBJECT, publicKey, privateKey);
 
-  // The cron job posts '{}', the trigger posts an action.
+  // The cron job posts '{}', the triggers post an action.
   let body: Record<string, unknown> = {};
   if (req.method === "POST") {
     try {
@@ -277,6 +348,10 @@ Deno.serve(async (req) => {
 
   if (body.action === "announce-test") {
     return await announceTest(sb, String(body.id ?? ""));
+  }
+
+  if (body.action === "announce-event") {
+    return await announceEvent(sb, String(body.id ?? ""));
   }
 
   /* ---- The evening digest ----------------------------------------- */

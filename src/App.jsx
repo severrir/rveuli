@@ -17,10 +17,13 @@ import TestsView from "./components/TestsView.jsx";
 import TestSheet from "./components/TestSheet.jsx";
 import PollsView from "./components/PollsView.jsx";
 import PollSheet from "./components/PollSheet.jsx";
+import EventsView from "./components/EventsView.jsx";
+import EventSheet from "./components/EventSheet.jsx";
 
 import { useHomework } from "./hooks/useHomework.js";
 import { useTests } from "./hooks/useTests.js";
 import { usePolls } from "./hooks/usePolls.js";
+import { useEvents } from "./hooks/useEvents.js";
 import { useDone } from "./hooks/useDone.js";
 import { useSession } from "./hooks/useSession.js";
 import { useToast } from "./hooks/useToast.js";
@@ -41,6 +44,10 @@ import {
   deletePoll,
   restorePoll,
   setPollClosed,
+  createEvent,
+  updateEvent,
+  deleteEvent,
+  restoreEvent,
 } from "./lib/repository.js";
 import { signOut } from "./lib/auth.js";
 import { getSubject } from "./lib/subjects.js";
@@ -54,7 +61,7 @@ import {
 
 const LAST_SEEN_KEY = "rveuli.last-seen.v1";
 
-const VIEWS = ["feed", "tests", "polls", "week", "archive"];
+const VIEWS = ["feed", "tests", "events", "polls", "week", "archive"];
 
 function readLastSeen() {
   try {
@@ -86,6 +93,7 @@ export default function App() {
   const { items, status, isStale, refresh } = useHomework();
   const tests = useTests();
   const polls = usePolls();
+  const events = useEvents();
   const { done, toggle } = useDone();
   const { rep, isRep } = useSession();
   const { toast, show, dismiss } = useToast();
@@ -100,6 +108,7 @@ export default function App() {
   const [sheet, setSheet] = useState(null); // null | {} | homework item
   const [testSheet, setTestSheet] = useState(null); // null | {} | test
   const [pollSheet, setPollSheet] = useState(null); // null | {} | poll
+  const [eventSheet, setEventSheet] = useState(null); // null | {} | event
   const [firstPaint, setFirstPaint] = useState(true);
   const [lastSeen] = useState(readLastSeen);
 
@@ -374,11 +383,49 @@ export default function App() {
     [polls, show],
   );
 
-  /* ---- The one add button, three meanings --------------------------- */
+  /* ---- ევენთები ------------------------------------------------------ */
+
+  const handleSaveEvent = useCallback(
+    async (form) => {
+      if (eventSheet?.id) {
+        await updateEvent(eventSheet.id, form);
+        show("ცვლილება შენახულია");
+      } else {
+        await createEvent(form, rep?.id);
+        show("ევენთი დაემატა — კლასს შეტყობინება მივა");
+      }
+      await events.refresh();
+    },
+    [eventSheet, rep, events, show],
+  );
+
+  const handleDeleteEvent = useCallback(
+    async (event) => {
+      await deleteEvent(event.id);
+      await events.refresh();
+      show("ევენთი წაიშალა", {
+        action: {
+          label: "დაბრუნება",
+          onClick: async () => {
+            await restoreEvent(event.id);
+            await events.refresh();
+            show("ევენთი დაბრუნდა");
+          },
+        },
+        duration: 7000,
+      });
+    },
+    [events, show],
+  );
+
+  /* ---- The one add button, four meanings ---------------------------- */
 
   const add = useMemo(() => {
     if (view === "tests") {
       return { label: "წერა", onClick: () => setTestSheet({}) };
+    }
+    if (view === "events") {
+      return { label: "ევენთი", onClick: () => setEventSheet({}) };
     }
     if (view === "polls") {
       return { label: "კენჭისყრა", onClick: () => setPollSheet({}) };
@@ -450,6 +497,24 @@ export default function App() {
               />
             </>
           )
+        ) : view === "events" ? (
+          events.status === "error" ? (
+            <EmptyState variant="error" />
+          ) : (
+            <>
+              {events.isStale && (
+                <p className="mx-4 mb-3 mt-6 rounded-lg border border-ink-600 bg-ink-700/60 px-3 py-2 text-meta text-paper-3">
+                  ინტერნეტი ვერ მივიღე — ეს ბოლო შენახული სიაა.
+                </p>
+              )}
+              <EventsView
+                items={events.items}
+                isRep={isRep}
+                onEdit={(event) => setEventSheet(event)}
+                onDelete={handleDeleteEvent}
+              />
+            </>
+          )
         ) : view === "polls" ? (
           polls.status === "error" ? (
             <EmptyState variant="error" />
@@ -466,70 +531,106 @@ export default function App() {
           )
         ) : status === "error" ? (
           <EmptyState variant="error" />
-        ) : view === "feed" ? (
+        ) : view === "feed" || view === "archive" ? (
           <>
-            <HeroDeadline
-              next={next}
-              weekTotal={week.total}
-              weekDone={week.doneCount}
-            />
+            {/* The hero names the nearest deadline, which is a statement
+                about work still ahead — so it stays out of the archive. */}
+            {view === "feed" && (
+              <HeroDeadline
+                next={next}
+                weekTotal={week.total}
+                weekDone={week.doneCount}
+              />
+            )}
             {isStale && (
               <p className="mx-4 mb-3 rounded-lg border border-ink-600 bg-ink-700/60 px-3 py-2 text-meta text-paper-3">
                 ინტერნეტი ვერ მივიღე — ეს ბოლო შენახული სიაა.
               </p>
             )}
+
+            {/* არქივი is the same homework seen later, not a separate
+                section, so it is a state of this tab rather than a sixth
+                entry in a bottom bar that had run out of room. */}
+            <div
+              className={`flex gap-1 px-4 ${view === "feed" ? "pb-3" : "pb-3 pt-6"}`}
+              role="group"
+              aria-label="დავალებების ხედი"
+            >
+              {[
+                { id: "feed", label: "მიმდინარე", count: sortedCurrent.length },
+                { id: "archive", label: "არქივი", count: archived.length },
+              ].map((t) => {
+                const active = view === t.id;
+                return (
+                  <button
+                    key={t.id}
+                    type="button"
+                    aria-pressed={active}
+                    onClick={() => {
+                      setView(t.id);
+                      setQuery("");
+                    }}
+                    className={`inline-flex min-h-11 items-center gap-1.5 rounded-lg border px-3.5 text-sm transition-colors ${
+                      active
+                        ? "border-blue-pen bg-blue-dim/30 text-paper"
+                        : "border-ink-600 text-paper-2 hover:bg-ink-700"
+                    }`}
+                  >
+                    {t.label}
+                    <span className="tnum text-meta text-paper-3">
+                      {t.count}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+
             <FilterBar
               query={query}
               onQueryChange={setQuery}
-              subject={subject}
-              onSubjectChange={setSubject}
-              counts={counts}
+              subject={view === "feed" ? subject : "all"}
+              onSubjectChange={view === "feed" ? setSubject : () => {}}
+              counts={view === "feed" ? counts : {}}
             />
-            <HomeworkGrid
-              items={visible}
-              doneSet={done}
-              firstPaint={firstPaint}
-              emptyState={
-                query ? (
-                  <EmptyState
-                    variant="search"
-                    query={query}
-                    onClear={() => setQuery("")}
-                  />
-                ) : (
-                  <EmptyState variant={isRep ? "none-rep" : "none"} />
-                )
-              }
-              {...cardProps}
-            />
+
+            {view === "feed" ? (
+              <HomeworkGrid
+                items={visible}
+                doneSet={done}
+                firstPaint={firstPaint}
+                emptyState={
+                  query ? (
+                    <EmptyState
+                      variant="search"
+                      query={query}
+                      onClear={() => setQuery("")}
+                    />
+                  ) : (
+                    <EmptyState variant={isRep ? "none-rep" : "none"} />
+                  )
+                }
+                {...cardProps}
+              />
+            ) : (
+              <ArchiveView
+                items={archivedVisible}
+                doneSet={done}
+                query={query}
+              />
+            )}
           </>
-        ) : view === "week" ? (
-          <div className="pt-6">
-            <WeekView items={week.items} doneSet={done} />
-          </div>
         ) : (
           <div className="pt-6">
-            <div className="mb-2">
-              <FilterBar
-                query={query}
-                onQueryChange={setQuery}
-                subject="all"
-                onSubjectChange={() => {}}
-                counts={{}}
-              />
-            </div>
-            <ArchiveView
-              items={archivedVisible}
-              doneSet={done}
-              query={query}
-            />
+            <WeekView items={week.items} doneSet={done} />
           </div>
         )}
         <Watermark />
       </main>
 
       <BottomNav
-        view={view}
+        // არქივი lives inside the board tab, so the board tab stays lit
+        // while it is open — otherwise no tab would look selected at all.
+        view={view === "archive" ? "feed" : view}
         onViewChange={(v) => {
           setView(v);
           setQuery("");
@@ -583,6 +684,13 @@ export default function App() {
         onClose={() => setPollSheet(null)}
         editing={pollSheet}
         onSave={handleSavePoll}
+      />
+
+      <EventSheet
+        open={eventSheet !== null}
+        onClose={() => setEventSheet(null)}
+        editing={eventSheet}
+        onSave={handleSaveEvent}
       />
 
       <Toast toast={toast} onDismiss={dismiss} />

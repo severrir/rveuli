@@ -263,6 +263,36 @@ export default function ReminderSheet({ open, onClose, onToast }) {
             </span>
           </button>
 
+          <button
+            type="button"
+            role="switch"
+            aria-checked={settings.announceEvents}
+            disabled={!on}
+            onClick={() => change({ announceEvents: !settings.announceEvents })}
+            className={`flex min-h-14 items-center gap-3 rounded-xl border border-ink-600 px-4 text-left transition-colors disabled:opacity-45 ${
+              on ? "hover:bg-ink-700" : ""
+            }`}
+          >
+            <span
+              aria-hidden="true"
+              className={`grid size-[22px] shrink-0 place-items-center rounded border transition-colors ${
+                settings.announceEvents
+                  ? "border-blue-pen bg-blue-pen text-ink-900"
+                  : "border-ink-600 text-transparent"
+              }`}
+            >
+              <Check size={13} strokeWidth={3} />
+            </span>
+            <span className="flex-1">
+              <span className="block text-base text-paper">
+                ახალი ევენთისას
+              </span>
+              <span className="block text-meta text-paper-3">
+                ექსკურსია, ოლიმპიადა, კრება — როცა დაინიშნება.
+              </span>
+            </span>
+          </button>
+
           <p className="measure border-t border-hairline pt-3 text-meta text-paper-3">
             შეხსენება ამ მოწყობილობაზეა შენახული — სხვა ტელეფონზე ცალკე
             ჩაირთვება. საღამოს შეტყობინება მოდის მხოლოდ მაშინ, თუ

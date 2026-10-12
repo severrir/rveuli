@@ -12,6 +12,7 @@ import { supabase, isSupabaseConfigured, STORAGE_BUCKET } from "./supabase.js";
 import { MOCK_HOMEWORK, REPS } from "../data/mockHomework.js";
 import { MOCK_TESTS } from "../data/mockTests.js";
 import { MOCK_POLLS } from "../data/mockPolls.js";
+import { MOCK_EVENTS } from "../data/mockEvents.js";
 
 const COLUMNS =
   "id, subject, title, details, due_at, is_pinned, link_url, attachments, created_by, created_at, updated_at, deleted_at, profiles(display_name)";
@@ -654,6 +655,172 @@ export async function votePoll(pollId, optionId, voterKey) {
     p_option_id: optionId,
     p_voter_key: voterKey,
   });
+
+  if (error) throw error;
+}
+
+/* ================================================================ *
+ * ევენთები
+ *
+ * The only thing in this app with a place and a time *window* rather
+ * than a deadline, which is why it is neither a homework nor a test.
+ * Like წერები, inserting one announces it: a trigger on the table asks
+ * the edge function to send, so an event added from anywhere announces
+ * itself the same way.
+ * ================================================================ */
+
+const EVENT_COLUMNS =
+  "id, title, kind, location, note, starts_at, ends_at, created_by, created_at, updated_at, deleted_at, profiles(display_name)";
+
+function normalizeEvent(row) {
+  return {
+    id: row.id,
+    title: row.title,
+    kind: row.kind,
+    location: row.location ?? "",
+    note: row.note ?? "",
+    startsAt: new Date(row.starts_at),
+    endsAt: row.ends_at ? new Date(row.ends_at) : null,
+    createdBy: row.created_by ?? null,
+    authorName:
+      row.profiles?.display_name ??
+      REPS.find((r) => r.id === row.created_by)?.display_name ??
+      null,
+    createdAt: new Date(row.created_at),
+    updatedAt: row.updated_at ? new Date(row.updated_at) : null,
+    deletedAt: row.deleted_at ? new Date(row.deleted_at) : null,
+  };
+}
+
+function denormalizeEvent(input) {
+  return {
+    title: input.title.trim(),
+    kind: input.kind,
+    location: input.location?.trim() || null,
+    note: input.note?.trim() || null,
+    starts_at: new Date(input.startsAt).toISOString(),
+    ends_at: input.endsAt ? new Date(input.endsAt).toISOString() : null,
+  };
+}
+
+let localEvents = MOCK_EVENTS.map((r) => ({ ...r, deleted_at: null }));
+const eventListeners = new Set();
+const notifyEvents = () => eventListeners.forEach((fn) => fn());
+
+export async function listEvents() {
+  if (!isSupabaseConfigured) {
+    return localEvents.filter((r) => !r.deleted_at).map(normalizeEvent);
+  }
+
+  const { data, error } = await supabase
+    .from("events")
+    .select(EVENT_COLUMNS)
+    .is("deleted_at", null)
+    .order("starts_at", { ascending: true });
+
+  if (error) throw error;
+  return data.map(normalizeEvent);
+}
+
+export function subscribeToEvents(onChange) {
+  if (!isSupabaseConfigured) {
+    eventListeners.add(onChange);
+    return () => eventListeners.delete(onChange);
+  }
+
+  const channel = supabase
+    .channel("events-feed")
+    .on(
+      "postgres_changes",
+      { event: "*", schema: "public", table: "events" },
+      onChange,
+    )
+    .subscribe();
+
+  return () => supabase.removeChannel(channel);
+}
+
+export async function createEvent(input, authorId) {
+  if (!isSupabaseConfigured) {
+    const row = {
+      ...denormalizeEvent(input),
+      id: newId(),
+      created_by: authorId,
+      created_at: new Date().toISOString(),
+      updated_at: null,
+      deleted_at: null,
+    };
+    localEvents = [row, ...localEvents];
+    notifyEvents();
+    return normalizeEvent(row);
+  }
+
+  const { data, error } = await supabase
+    .from("events")
+    .insert({ ...denormalizeEvent(input), created_by: authorId })
+    .select(EVENT_COLUMNS)
+    .single();
+
+  if (error) throw error;
+  return normalizeEvent(data);
+}
+
+export async function updateEvent(id, input) {
+  if (!isSupabaseConfigured) {
+    localEvents = localEvents.map((r) =>
+      r.id === id
+        ? {
+            ...r,
+            ...denormalizeEvent(input),
+            updated_at: new Date().toISOString(),
+          }
+        : r,
+    );
+    notifyEvents();
+    return localEvents.find((r) => r.id === id);
+  }
+
+  const { data, error } = await supabase
+    .from("events")
+    .update({ ...denormalizeEvent(input), updated_at: new Date().toISOString() })
+    .eq("id", id)
+    .select(EVENT_COLUMNS)
+    .single();
+
+  if (error) throw error;
+  return normalizeEvent(data);
+}
+
+export async function deleteEvent(id) {
+  if (!isSupabaseConfigured) {
+    localEvents = localEvents.map((r) =>
+      r.id === id ? { ...r, deleted_at: new Date().toISOString() } : r,
+    );
+    notifyEvents();
+    return;
+  }
+
+  const { error } = await supabase
+    .from("events")
+    .update({ deleted_at: new Date().toISOString() })
+    .eq("id", id);
+
+  if (error) throw error;
+}
+
+export async function restoreEvent(id) {
+  if (!isSupabaseConfigured) {
+    localEvents = localEvents.map((r) =>
+      r.id === id ? { ...r, deleted_at: null } : r,
+    );
+    notifyEvents();
+    return;
+  }
+
+  const { error } = await supabase
+    .from("events")
+    .update({ deleted_at: null })
+    .eq("id", id);
 
   if (error) throw error;
 }
