@@ -3,6 +3,10 @@
 -- Change the two values below, then run the whole file in the Supabase SQL
 -- editor: Dashboard -> SQL Editor -> New query -> paste -> Run.
 --
+-- Since 0004_people.sql this is the long way round: an owner can do all of
+-- this from the app, through the people icon in the header. Keep using this
+-- file for the first owner, or if every owner is locked out.
+--
 -- What makes someone a rep is the row in public.profiles, not the account.
 -- An auth user with no profile row can read the board like any student and
 -- write nothing, so adding and removing reps is just adding and removing

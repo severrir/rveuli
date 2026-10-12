@@ -1,4 +1,4 @@
-import { Bell, LogIn, LogOut } from "lucide-react";
+import { Bell, LogIn, LogOut, Users } from "lucide-react";
 import InstallButton from "./InstallButton.jsx";
 
 /**
@@ -6,7 +6,14 @@ import InstallButton from "./InstallButton.jsx";
  * the current role are always answerable. The blur is here to keep the
  * title legible over moving cards, not as an effect.
  */
-export default function Navbar({ rep, onSignIn, onSignOut, onToast, onReminders }) {
+export default function Navbar({
+  rep,
+  onSignIn,
+  onSignOut,
+  onToast,
+  onReminders,
+  onPeople,
+}) {
   return (
     <header className="sticky top-0 z-30 border-b border-hairline bg-ink-900/92 backdrop-blur-md">
       <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-2.5">
@@ -37,9 +44,25 @@ export default function Navbar({ rep, onSignIn, onSignOut, onToast, onReminders 
 
         {rep ? (
           <>
+            {/* Only an owner can act on it, so only an owner is offered it.
+                The header is already tight on a narrow phone; a control
+                that answers "permission denied" is not worth the width. */}
+            {rep.role === "owner" && (
+              <button
+                type="button"
+                onClick={onPeople}
+                aria-label="კლასის უფროსები"
+                className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg border border-ink-600 text-paper-2 transition-colors hover:bg-ink-700 hover:text-paper"
+              >
+                <Users size={16} strokeWidth={1.75} />
+              </button>
+            )}
+
             <span className="hidden text-right text-meta leading-tight text-paper-2 sm:block">
               {rep.display_name}
-              <span className="block text-paper-3">კლასის უფროსი</span>
+              <span className="block text-paper-3">
+                {rep.role === "owner" ? "ადმინისტრატორი" : "კლასის უფროსი"}
+              </span>
             </span>
             <button
               type="button"
