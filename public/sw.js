@@ -95,7 +95,11 @@ self.addEventListener("push", (event) => {
       icon: at("./icon-192.png"),
       badge: at("./icon-192.png"),
       lang: "ka",
-      tag: "rveuli-daily",
+      // The sender picks the tag. Notifications sharing one replace each
+      // other, which is right for the nightly digest — only the newest
+      // matters — and wrong for a test announcement, which would otherwise
+      // quietly overwrite the reminder a student had not read yet.
+      tag: payload.tag ?? "rveuli-daily",
       renotify: true,
       data: { url: payload.url ?? ROOT.href },
     }),

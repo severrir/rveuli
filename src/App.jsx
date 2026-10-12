@@ -12,8 +12,15 @@ import HomeworkSheet from "./components/HomeworkSheet.jsx";
 import Toast from "./components/Toast.jsx";
 import Watermark from "./components/Watermark.jsx";
 import ReminderSheet from "./components/ReminderSheet.jsx";
+import PeopleSheet from "./components/PeopleSheet.jsx";
+import TestsView from "./components/TestsView.jsx";
+import TestSheet from "./components/TestSheet.jsx";
+import PollsView from "./components/PollsView.jsx";
+import PollSheet from "./components/PollSheet.jsx";
 
 import { useHomework } from "./hooks/useHomework.js";
+import { useTests } from "./hooks/useTests.js";
+import { usePolls } from "./hooks/usePolls.js";
 import { useDone } from "./hooks/useDone.js";
 import { useSession } from "./hooks/useSession.js";
 import { useToast } from "./hooks/useToast.js";
@@ -25,6 +32,15 @@ import {
   deleteHomework,
   restoreHomework,
   setPinned,
+  createTest,
+  updateTest,
+  deleteTest,
+  restoreTest,
+  createPoll,
+  updatePoll,
+  deletePoll,
+  restorePoll,
+  setPollClosed,
 } from "./lib/repository.js";
 import { signOut } from "./lib/auth.js";
 import { getSubject } from "./lib/subjects.js";
@@ -38,6 +54,8 @@ import {
 
 const LAST_SEEN_KEY = "rveuli.last-seen.v1";
 
+const VIEWS = ["feed", "tests", "polls", "week", "archive"];
+
 function readLastSeen() {
   try {
     const raw = localStorage.getItem(LAST_SEEN_KEY);
@@ -47,19 +65,41 @@ function readLastSeen() {
   }
 }
 
+/**
+ * Which tab to open on.
+ *
+ * The test announcement links to `?view=tests`, so tapping the
+ * notification lands on the written work rather than on the board, where
+ * the student would then have to go looking for what they were just told
+ * about.
+ */
+function initialView() {
+  try {
+    const wanted = new URLSearchParams(window.location.search).get("view");
+    return VIEWS.includes(wanted) ? wanted : "feed";
+  } catch {
+    return "feed";
+  }
+}
+
 export default function App() {
   const { items, status, isStale, refresh } = useHomework();
+  const tests = useTests();
+  const polls = usePolls();
   const { done, toggle } = useDone();
   const { rep, isRep } = useSession();
   const { toast, show, dismiss } = useToast();
   const now = useNow();
 
-  const [view, setView] = useState("feed");
+  const [view, setView] = useState(initialView);
   const [query, setQuery] = useState("");
   const [subject, setSubject] = useState("all");
   const [loginOpen, setLoginOpen] = useState(false);
   const [remindersOpen, setRemindersOpen] = useState(false);
+  const [peopleOpen, setPeopleOpen] = useState(false);
   const [sheet, setSheet] = useState(null); // null | {} | homework item
+  const [testSheet, setTestSheet] = useState(null); // null | {} | test
+  const [pollSheet, setPollSheet] = useState(null); // null | {} | poll
   const [firstPaint, setFirstPaint] = useState(true);
   const [lastSeen] = useState(readLastSeen);
 
@@ -244,6 +284,108 @@ export default function App() {
     [],
   );
 
+  /* ---- წერები ------------------------------------------------------- */
+
+  const handleSaveTest = useCallback(
+    async (form) => {
+      if (testSheet?.id) {
+        await updateTest(testSheet.id, form);
+        show("ცვლილება შენახულია");
+      } else {
+        await createTest(form, rep?.id);
+        // The notification is sent by a trigger on the table, so the rep is
+        // told what has already happened rather than what is about to.
+        show("წერა დაინიშნა — კლასს შეტყობინება მივა");
+      }
+      await tests.refresh();
+    },
+    [testSheet, rep, tests, show],
+  );
+
+  const handleDeleteTest = useCallback(
+    async (test) => {
+      await deleteTest(test.id);
+      await tests.refresh();
+      show("წერა წაიშალა", {
+        action: {
+          label: "დაბრუნება",
+          onClick: async () => {
+            await restoreTest(test.id);
+            await tests.refresh();
+            show("წერა დაბრუნდა");
+          },
+        },
+        duration: 7000,
+      });
+    },
+    [tests, show],
+  );
+
+  /* ---- კენჭისყრა ----------------------------------------------------- */
+
+  const handleSavePoll = useCallback(
+    async (form) => {
+      if (pollSheet?.id) {
+        await updatePoll(pollSheet.id, form);
+        show("ცვლილება შენახულია");
+      } else {
+        await createPoll(form, rep?.id);
+        show("კენჭისყრა დაიწყო");
+      }
+      await polls.refresh();
+    },
+    [pollSheet, rep, polls, show],
+  );
+
+  const handleDeletePoll = useCallback(
+    async (poll) => {
+      await deletePoll(poll.id);
+      await polls.refresh();
+      show("კენჭისყრა წაიშალა", {
+        action: {
+          label: "დაბრუნება",
+          onClick: async () => {
+            await restorePoll(poll.id);
+            await polls.refresh();
+            show("კენჭისყრა დაბრუნდა");
+          },
+        },
+        duration: 7000,
+      });
+    },
+    [polls, show],
+  );
+
+  const handleTogglePollClosed = useCallback(
+    async (poll) => {
+      const closing = !poll.closedAt;
+      await setPollClosed(poll.id, closing);
+      await polls.refresh();
+      show(closing ? "კენჭისყრა დაიხურა" : "კენჭისყრა ხელახლა გაიხსნა");
+    },
+    [polls, show],
+  );
+
+  const handleVote = useCallback(
+    async (pollId, optionId) => {
+      await polls.vote(pollId, optionId);
+      show("ხმა ჩაწერილია");
+    },
+    [polls, show],
+  );
+
+  /* ---- The one add button, three meanings --------------------------- */
+
+  const add = useMemo(() => {
+    if (view === "tests") {
+      return { label: "წერა", onClick: () => setTestSheet({}) };
+    }
+    if (view === "polls") {
+      return { label: "კენჭისყრა", onClick: () => setPollSheet({}) };
+    }
+    return { label: "დამატება", onClick: () => setSheet({}) };
+  }, [view]);
+
   const cardProps = {
     onToggleDone: toggle,
     onCopy: handleCopy,
@@ -278,6 +420,7 @@ export default function App() {
         rep={rep}
         onToast={show}
         onReminders={() => setRemindersOpen(true)}
+        onPeople={() => setPeopleOpen(true)}
         onSignIn={() => setLoginOpen(true)}
         onSignOut={async () => {
           await signOut();
@@ -286,7 +429,42 @@ export default function App() {
       />
 
       <main id="main" className="mx-auto max-w-6xl">
-        {status === "error" ? (
+        {/* The homework error belongs to the three homework tabs. A failed
+            feed must not blank წერები, which loads separately and may
+            well have arrived. */}
+        {view === "tests" ? (
+          tests.status === "error" ? (
+            <EmptyState variant="error" />
+          ) : (
+            <>
+              {tests.isStale && (
+                <p className="mx-4 mb-3 mt-6 rounded-lg border border-ink-600 bg-ink-700/60 px-3 py-2 text-meta text-paper-3">
+                  ინტერნეტი ვერ მივიღე — ეს ბოლო შენახული სიაა.
+                </p>
+              )}
+              <TestsView
+                items={tests.items}
+                isRep={isRep}
+                onEdit={(test) => setTestSheet(test)}
+                onDelete={handleDeleteTest}
+              />
+            </>
+          )
+        ) : view === "polls" ? (
+          polls.status === "error" ? (
+            <EmptyState variant="error" />
+          ) : (
+            <PollsView
+              items={polls.items}
+              ballots={polls.ballots}
+              onVote={handleVote}
+              isRep={isRep}
+              onEdit={(poll) => setPollSheet(poll)}
+              onDelete={handleDeletePoll}
+              onToggleClosed={handleTogglePollClosed}
+            />
+          )
+        ) : status === "error" ? (
           <EmptyState variant="error" />
         ) : view === "feed" ? (
           <>
@@ -358,7 +536,8 @@ export default function App() {
           window.scrollTo({ top: 0, behavior: "smooth" });
         }}
         isRep={isRep}
-        onAdd={() => setSheet({})}
+        onAdd={add.onClick}
+        addLabel={add.label}
         badge={view === "feed" ? 0 : newCount}
       />
 
@@ -367,6 +546,17 @@ export default function App() {
         onClose={() => setRemindersOpen(false)}
         onToast={show}
       />
+
+      {/* Mounted only for an owner: the sheet lists email addresses, and
+          the database refuses the call for anyone else anyway. */}
+      {rep?.role === "owner" && (
+        <PeopleSheet
+          open={peopleOpen}
+          onClose={() => setPeopleOpen(false)}
+          rep={rep}
+          onToast={show}
+        />
+      )}
 
       <LoginSheet
         open={loginOpen}
@@ -379,6 +569,20 @@ export default function App() {
         onClose={() => setSheet(null)}
         editing={sheet}
         onSave={handleSave}
+      />
+
+      <TestSheet
+        open={testSheet !== null}
+        onClose={() => setTestSheet(null)}
+        editing={testSheet}
+        onSave={handleSaveTest}
+      />
+
+      <PollSheet
+        open={pollSheet !== null}
+        onClose={() => setPollSheet(null)}
+        editing={pollSheet}
+        onSave={handleSavePoll}
       />
 
       <Toast toast={toast} onDismiss={dismiss} />

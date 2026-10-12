@@ -21,6 +21,8 @@ const SETTINGS_KEY = "rveuli.reminders.v1";
 export const DEFAULT_SETTINGS = {
   hour: 19,
   schoolNightsOnly: true,
+  // "A წერა has been set" — sent when it is set, not on a schedule.
+  announceTests: true,
 };
 
 /** Hours a student might plausibly want to be reminded. */
@@ -164,6 +166,20 @@ async function saveSubscription(subscription, settings) {
     p_school_only: settings.schoolNightsOnly,
   });
   if (error) throw error;
+
+  // A second call rather than a sixth argument. Giving
+  // `save_push_subscription` an optional extra parameter would leave two
+  // signatures that both match a five-argument call, and PostgREST would
+  // start refusing with "function is not unique" — including for the
+  // already-published bundle, which still calls it with five.
+  const { error: announceError } = await supabase.rpc("set_push_announce", {
+    p_endpoint: json.endpoint,
+    p_on: settings.announceTests ?? true,
+  });
+  // The schedule is saved either way; only the announcement flag is behind.
+  if (announceError) {
+    console.error("[რვეული] announce flag not saved", announceError);
+  }
 }
 
 /** Change the schedule without asking for permission again. */

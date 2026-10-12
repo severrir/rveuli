@@ -229,10 +229,44 @@ export default function ReminderSheet({ open, onClose, onToast }) {
             </span>
           </button>
 
+          {/* A separate switch from the evening digest, because it is a
+              different kind of interruption: the digest arrives at an hour
+              the student chose, this one arrives when a rep sets a test. */}
+          <button
+            type="button"
+            role="switch"
+            aria-checked={settings.announceTests}
+            disabled={!on}
+            onClick={() => change({ announceTests: !settings.announceTests })}
+            className={`flex min-h-14 items-center gap-3 rounded-xl border border-ink-600 px-4 text-left transition-colors disabled:opacity-45 ${
+              on ? "hover:bg-ink-700" : ""
+            }`}
+          >
+            <span
+              aria-hidden="true"
+              className={`grid size-[22px] shrink-0 place-items-center rounded border transition-colors ${
+                settings.announceTests
+                  ? "border-blue-pen bg-blue-pen text-ink-900"
+                  : "border-ink-600 text-transparent"
+              }`}
+            >
+              <Check size={13} strokeWidth={3} />
+            </span>
+            <span className="flex-1">
+              <span className="block text-base text-paper">
+                წერის დანიშვნისას
+              </span>
+              <span className="block text-meta text-paper-3">
+                როცა ახალ საკონტროლოს ან შემაჯამებელს დანიშნავენ, მაშინვე
+                შეგატყობინებს.
+              </span>
+            </span>
+          </button>
+
           <p className="measure border-t border-hairline pt-3 text-meta text-paper-3">
             შეხსენება ამ მოწყობილობაზეა შენახული — სხვა ტელეფონზე ცალკე
-            ჩაირთვება. შეტყობინება მოდის მხოლოდ მაშინ, თუ ხვალისთვის
-            დავალება ნამდვილად არის.
+            ჩაირთვება. საღამოს შეტყობინება მოდის მხოლოდ მაშინ, თუ
+            ხვალისთვის დავალება ნამდვილად არის.
           </p>
         </div>
       )}

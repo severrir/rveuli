@@ -60,14 +60,33 @@ the demo sign-in is gone.
 **The `profiles` row is the grant, not the account.** That is the whole
 permission model, and it means adding or removing a rep is one row.
 
-### Adding a rep (admin)
+### Adding a rep — from the app
 
-Open `supabase/add-rep.sql`, change the email, password and name at the
-top, and run the whole file in **Dashboard → SQL Editor → New query**. It
-prints the current list of reps when it finishes.
+Sign in as an `owner` and tap the people icon in the header. Fill in a
+name, an email and the suggested password, and tap **დამატება**. The
+sheet then shows the two lines to pass on — address and password — with a
+copy button, because the password is not shown again.
 
-Running it again for the same email resets that person's password, which is
-also how you recover a forgotten one.
+The same sheet removes someone, resets a forgotten password, and decides
+who else is an owner. No dashboard, no SQL, no email delivery to configure.
+
+A `rep` posts, edits and deletes homework. An `owner` does all of that and
+manages this list, so only an owner sees the icon at all. The app refuses
+to leave you with no owners, since nothing in the client could undo that.
+
+Reps are added with a password rather than an invitation link on purpose:
+the class is a handful of people who see each other daily, a password read
+out at the end of a lesson arrives sooner than mail that needs a verified
+sending domain, and nobody waits on a link that landed in spam.
+
+### Adding a rep — from the dashboard
+
+Needed only for the first owner, or if every owner has locked themselves
+out. Open `supabase/add-rep.sql`, change the email, password and name at
+the top, and run the whole file in **Dashboard → SQL Editor → New query**.
+It prints the current list of reps when it finishes.
+
+Running it again for the same email resets that person's password.
 
 Do not create the auth user by hand in SQL without that script: GoTrue
 reads several token columns into non-nullable strings, and if they are left
@@ -84,6 +103,8 @@ select id, 'გიორგი', 'rep' from auth.users where email = 'giorgi@exa
 
 ### Removing a rep
 
+The people sheet does this. By hand, dropping the grant is enough:
+
 ```sql
 delete from public.profiles
 where id = (select id from auth.users where email = 'giorgi@example.com');
@@ -91,24 +112,107 @@ where id = (select id from auth.users where email = 'giorgi@example.com');
 
 They keep their account and can still read the board like any student, but
 posting stops immediately — even on a session they already hold. Delete the
-row in **Authentication → Users** too if you want the account gone entirely.
+row in **Authentication → Users** too if you want the account gone entirely;
+the sheet in the app always removes both.
 
-`role` is `rep` or `owner`. Both can post, edit and delete; `owner` is there
-to record who looks after the board.
+### How the owner tools work
+
+Creating an account writes `auth.users` and `auth.identities`, which no
+browser-held role may touch. So `0004_people.sql` adds five
+security-definer functions — `add_rep`, `list_people`, `remove_rep`,
+`set_rep_role`, `set_rep_password` — and each one checks the caller is an
+owner before it writes. That keeps the `service_role` key out of the
+client, which is the only alternative.
 
 Deleting is soft: the row is kept and hidden, so a mis-tap can be undone
 from the toast. Nothing is ever hard-deleted by the app.
 
 ---
 
+## წერები
+
+The tab next to the board is the term's written work: საკონტროლო,
+შემაჯამებელი, კარნახი, ტესტი, ზეპირი გამოკითხვა and გამოცდა. Each entry
+carries the subject, the date and — required, not optional — **what it is
+on**, because a date with no subject matter announced is the thing that
+makes a class anxious rather than prepared.
+
+It is a separate tab rather than a filter on the board on purpose.
+Homework asks "what do I hand in tomorrow" and leaves once it is handed
+in; a test asks "how long have I got, and what is it on", sits on the
+horizon for weeks, is never ticked done, and is worth reading backwards
+through at the end of a term. Past წერები stay, behind a toggle.
+
+The nearest one is named at the top of the tab, and the countdown
+deliberately coarsens with distance — "ხვალ", "5 დღეში", "3 კვირაში" —
+because nobody revises to the hour, and an exact day count three weeks out
+is false precision.
+
+**Adding one notifies the class.** A trigger on the table asks the
+`send-reminders` function to send "ფიზიკა — შემაჯამებელი / ხუთშაბათს,
+16 ოქტომბერი" the moment a rep saves it, and tapping the notification
+opens this tab rather than the board. Students can turn just this off in
+the bell settings and keep the evening digest, or the other way round —
+the two are different kinds of interruption and get separate switches.
+
+Because the trigger lives on the table, a test added from any device, or
+straight from the SQL editor, announces itself the same way. A failure to
+send is swallowed: a notification that cannot go out must never cost a rep
+the test they just typed in.
+
+## კენჭისყრა
+
+Where the class decides something — a question, two to six answers, one
+vote per phone. A rep opens it, closes it by hand or on a timer, and can
+reopen it if they closed the wrong one.
+
+Two rules shape it:
+
+- **Nobody sees the numbers until they have voted**, or until the poll
+  closes. A running tally shown before the tap turns a vote into a
+  bandwagon, and thirty students is small enough that one visible early
+  lead decides the rest.
+- **Nothing on the screen is red.** Red is the deadline everywhere else in
+  this app, so the bars are drawn in the blue pen. A ballot is a decision,
+  not something overdue.
+
+A vote can be changed while the poll is open; the other answers stay
+offered underneath the results.
+
+### How the ballot is kept secret
+
+`poll_votes` has row-level security on and **no policies at all**, so the
+table is unreachable through the API in both directions. A SELECT policy
+would publish who voted for what in a class of thirty, which is the one
+thing a secret ballot exists to prevent.
+
+Two functions are the only way in. `cast_poll_vote` writes a single
+ballot, after checking the poll is open and that the option is really on
+it — otherwise a crafted call could invent a choice that appears in the
+tally but on no ballot. `poll_tallies` returns counts and nothing else: no
+voter key, no who-chose-what.
+
+Identity is a random key the browser generates for itself and keeps in
+localStorage. It says nothing about the student, there is no account to tie
+it to, and the primary key on `poll_votes` is what actually enforces one
+vote per device rather than the client politely declining to ask twice.
+Clearing site data earns a second vote — accepted, because the alternative
+is thirty teenagers holding accounts in order to settle where the
+excursion goes.
+
 ## Reminders
 
 Students can turn on an evening notification telling them how much is due
-tomorrow. Tap the bell in the header to open the settings:
+tomorrow, and an announcement when a წერა is set. Tap the bell in the
+header to open the settings:
 
 - **On / off** — per device, no account needed.
 - **Time** — any hour from 15:00 to 22:00 Tbilisi.
 - **Only before a school day** — stays quiet on Saturday evening.
+- **When a წერა is set** — the announcement above, separately switchable.
+  It ignores the chosen hour and the school-day rule, because both of those
+  answer questions about the nightly digest and neither has anything to say
+  about a test three weeks out.
 
 Everything applies the moment it is tapped; there is no save button. The
 settings live on the push subscription row and are mirrored into
@@ -121,6 +225,19 @@ device stores the hour it wants, so one schedule serves every preference —
 the function works out who is due. If nothing is due tomorrow it sends
 nothing at all; an app that pings you to say there is no homework gets
 muted within a week.
+
+The same function sends the წერა announcement, invoked by the trigger with
+`{ action: "announce-test", id }` instead of by the clock. It is one
+function because it is one VAPID keypair: a second function would need its
+own copy of the signing key. The trigger authenticates exactly as the cron
+job does — the anon key in `Authorization` to satisfy `verify_jwt`, and
+`CRON_INVOKE_KEY` in `x-cron-key` so the anon key alone cannot notify the
+class. Both the project URL and the anon key are read from Vault, so
+re-pointing at another project needs no edit to the migration.
+
+Each notification carries its own `tag`. The nightly digest replaces itself
+— only the newest matters — while a test announcement must not quietly
+overwrite a reminder the student has not read yet.
 
 The VAPID keypair is **generated by the function itself on first run** and
 the private half is kept in Supabase Vault. There is no key to paste into
@@ -139,12 +256,20 @@ steps instead of a permission prompt Safari would refuse.
 
 ### Security notes
 
-Three Supabase advisories are left open on purpose:
+Several Supabase advisories are left open on purpose:
 
 - **`push_subscriptions` has RLS on and no policies.** That is the point:
   the table is unreachable through the API, and the two functions above are
   the only way in. A SELECT policy would make the endpoint list readable,
   which would let anyone notify the whole class.
+- **`poll_votes` has RLS on and no policies**, for the same reason and a
+  sharper one: a readable ballot table is a list of who voted for what.
+  `cast_poll_vote` and `poll_tallies` are the only way in, and the second
+  returns aggregates only.
+- **`cast_poll_vote`, `poll_tallies` and `set_push_announce` are callable
+  by `anon`.** They have to be — students never sign in. Each validates
+  its input and touches one poll or one endpoint; none can read or
+  enumerate anything.
 - **`save_push_subscription` / `delete_push_subscription` are callable by
   `anon`.** They have to be — students never sign in. Each validates its
   input, touches one endpoint and returns nothing, so neither can read or
@@ -153,6 +278,11 @@ Three Supabase advisories are left open on purpose:
   schema and are not exposed: calling `/rest/v1/rpc/http_post` as `anon`
   returns 404. Moving the extension would risk the cron job for a lint with
   no reachable surface.
+- **The five people functions are callable by `authenticated`.** They have
+  to be — an owner is a signed-in user, and PostgREST is how the app
+  reaches them. Each one's first statement is the owner check, `anon` has
+  no EXECUTE at all, and the part that writes `auth.users`
+  (`private.write_rep`) is granted to nobody.
 
 Worth fixing when you get a moment: **leaked password protection** is off.
 Dashboard → Authentication → Policies.
@@ -200,13 +330,18 @@ src/
     subjects.js      the 14 subjects and the paper each one is printed on
     repository.js    one interface; Supabase when configured, seed data when not
     auth.js          rep sign-in (and the local demo session)
+    people.js        the owner tools: add, remove, role, password
+    tests.js         the six kinds of წერა, and how a countdown reads
+    polls.js         this device's ballot key, and how a result is shaped
     doneState.js     the personal tick, localStorage only
     compressImage.js shrinks textbook photos before upload
     push.js          reminder subscription
-  hooks/             useHomework, useSession, useDone, useNow, useToast
+  hooks/             useHomework, useTests, usePolls, useSession, useDone,
+                     useNow, useToast
   components/        Navbar, HeroDeadline, FilterBar, HomeworkGrid,
-                     HomeworkCard, WeekView, ArchiveView, Sheet,
-                     HomeworkSheet, LoginSheet, BottomNav, Toast, …
+                     HomeworkCard, WeekView, ArchiveView, TestsView,
+                     PollsView, Sheet, HomeworkSheet, TestSheet, PollSheet,
+                     LoginSheet, PeopleSheet, BottomNav, Toast, …
 supabase/
   migrations/        schema, RLS, storage, cron
   functions/         the reminder sender
